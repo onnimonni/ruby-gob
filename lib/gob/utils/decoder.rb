@@ -27,7 +27,7 @@ class Gob::Utils::Decoder
 	# no bytes were missing in the transit
 	def content_length_correct?(content=@content)
 		length, check_bytes = content_byte_length(content)
-		length == content.length - check_bytes
+		length == content.bytes.length - check_bytes
 	end
 
 	# These are the supported types for gob encoding
@@ -89,7 +89,7 @@ class Gob::Utils::Decoder
 		type = type_for_byte(content[0])
 
 		unless check_for_zero_digit?(content[1])
-			raise Gob::Utils::Decoder::ZeroMissing, "Content should have a zero byte after #{type} declaration" 
+			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
 		end
 
 		# Rest of the content is for the data itself
@@ -103,7 +103,7 @@ class Gob::Utils::Decoder
 			when 0
 				false
 			else
-				raise NotImplementedError, "Incorrect content for boolean type"
+				raise Gob::Utils::Decoder::DecodingError::ZeroMismatch, "Incorrect byte for boolean type: #{content.unpack('C')[0]}"
 			end
 		when :string
 			go_through_length_bytes(content)

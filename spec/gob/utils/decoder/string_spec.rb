@@ -18,8 +18,50 @@ RSpec.describe Gob::Utils::Decoder do
         expect(decoder.type).to be :string
       end
 
-      it "has correct type" do
+      it "returns correct string" do
         expect(decoder.decode).to eq lorem_ipsum
+      end
+    end
+
+    context "Hello" do
+      let!(:content) { "\x0F\f\x00\fHello World!" }
+      let!(:decoder) { Gob::Utils::Decoder.new(content) }
+
+      it "has correct length according to bytes" do
+        expect(decoder.content_byte_length).to eq [15,1]
+      end
+
+      it "has correct length according to bytes" do
+        expect(decoder.content_length_correct?).to be true
+      end
+
+      it "has correct type" do
+        expect(decoder.type).to be :string
+      end
+
+      it "returns correct string" do
+        expect(decoder.decode).to eq "Hello World!"
+      end
+    end
+
+    context "🐻🦊🐨🦁🐮🐷" do
+      let!(:content) { "\e\f\x00\x18\xF0\x9F\x90\xBB\xF0\x9F\xA6\x8A\xF0\x9F\x90\xA8\xF0\x9F\xA6\x81\xF0\x9F\x90\xAE\xF0\x9F\x90\xB7" }
+      let!(:decoder) { Gob::Utils::Decoder.new(content) }
+
+      it "has correct length according to bytes" do
+        expect(decoder.content_byte_length).to eq [27,1]
+      end
+
+      it "has correct length according to bytes" do
+        expect(decoder.content_length_correct?).to be true
+      end
+
+      it "has correct type" do
+        expect(decoder.type).to be :string
+      end
+
+      it "returns correct string" do
+        expect(decoder.decode).to eq "🐻🦊🐨🦁🐮🐷"
       end
     end
   end
