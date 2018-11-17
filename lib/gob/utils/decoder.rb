@@ -3,30 +3,43 @@ class Gob::Utils::Decoder
 		@content = content
 	end
 
-	# Calculates the content length according to the first bytes
-	# Source: https://golang.org/pkg/encoding/gob/
-	def content_byte_length(content=@content)
+	# Reads next integer from content
+	def read_next_int(content,opts={signed: true})
 		first_byte = content[0].unpack('C')[0]
-		if first_byte <= 128
+		if first_byte <= 128 # Source: https://golang.org/pkg/encoding/gob/
 			# First byte tells the length if byte count is smaller than 128
-			content_length = first_byte
-			content_length_check_byte_count = 1
+			int = first_byte
+			int_byte_count = 1
 		else
 			# First byte holds the byte count, negated
-			content_length_check_byte_count = (first_byte ^ 0xFF) + 1 + 1
+			int_byte_count = (first_byte ^ 0xFF) + 1 + 1
 
-			# Take as many bytes as the first byte mentioned and unpack them as unsigned integer in big endian encoding
-			content_length = content[1..content_length_check_byte_count].unpack('S>')[0]
+			# TODO: really stupid way to convert golang integer to ruby but I wanted to move forward
+			# Problem with unpack is that I would need to know which size it is, and for now I'm just too lazy to figure out
+			int = content[1..int_byte_count].bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
+		end
+
+		# Check the sign from the last digit and shift
+		if opts[:signed]
+			int = -(int % 2) + (int % 2 == 1 ? -1 : 1) * (int >> 1)
 		end
 
 		# Tells how big the content is and how many bytes in beginning are just for the checksum
-		[content_length, content_length_check_byte_count]
+		[int, int_byte_count]
+	end
+
+	def read_next_uint(content)
+		read_next_int(content, signed: false)
+	end
+
+	def content_byte_length
+		read_next_uint(@content)
 	end
 
 	# Checks if the gob encoded content length is valid and
 	# no bytes were missing in the transit
 	def content_length_correct?(content=@content)
-		length, check_bytes = content_byte_length(content)
+		length, check_bytes = read_next_uint(content)
 		length == content.bytes.length - check_bytes
 	end
 
@@ -53,7 +66,7 @@ class Gob::Utils::Decoder
 
 	# Checks which kind of data is included
 	def type(content=@content)
-		content_length, skip_bytes = content_byte_length(content)
+		content_length, skip_bytes = read_next_uint(content)
 		type_for_byte(content[skip_bytes])
 	end
 
@@ -77,7 +90,7 @@ class Gob::Utils::Decoder
 			raise Gob::Utils::Decoder::ContentMissing, "Content length is too short, retry with all bytes intact"
 		end
 
-		content_length, skip_bytes = content_byte_length(content)
+		content_length, skip_bytes = read_next_uint(content)
 		content[skip_bytes..-1]
 	end
 
@@ -105,6 +118,10 @@ class Gob::Utils::Decoder
 			else
 				raise Gob::Utils::Decoder::DecodingError::ZeroMismatch, "Incorrect byte for boolean type: #{content.unpack('C')[0]}"
 			end
+		when :int
+			read_next_int(content).first
+		when :uint
+			read_next_uint(content).first
 		when :string
 			go_through_length_bytes(content)
 		else
