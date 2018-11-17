@@ -57,5 +57,27 @@ RSpec.describe Gob::Utils::Decoder do
         expect(decoder.decode).to be -1000
       end
     end
+
+    context "smallest signed 64bit integer" do
+
+      let!(:content) { "\v\x04\x00\xF8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFD" }
+      let!(:decoder) { Gob::Utils::Decoder.new(content) }
+
+      it "has correct length according to bytes" do
+        expect(decoder.content_byte_length).to eq [11,1]
+      end
+
+      it "has correct length" do
+        expect(decoder.content_length_correct?).to be true
+      end
+
+      it "has correct type" do
+        expect(decoder.type).to be :int
+      end
+
+      it "returns correct negative number" do
+        expect(decoder.decode).to eq -9223372036854775807
+      end
+    end
   end
 end
