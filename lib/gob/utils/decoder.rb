@@ -22,12 +22,12 @@ class Gob::Utils::Decoder
 	# Reads next integer from content
 	# Returns the integer and tells how many bytes were needed to read it
 	def read_next_uint(content)
-		byte_count, uint_bytes = read_next_uint_bytes(content)
+		byte_count, uint_byte_string = read_next_uint_bytes(content)
 
 		# TODO: really stupid way to convert golang integer to ruby but I wanted to move forward
 		# Problem with unpack is that I would need to know which size it is, and for now I'm just too lazy to figure out
 		# This would propably make the encoder much faster if written properly
-		uint = uint_bytes.bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
+		uint = uint_byte_string.bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
 		
 		# Returns the integer and tells how many bytes were needed to read it
 		[uint, byte_count]
@@ -60,7 +60,21 @@ class Gob::Utils::Decoder
 	# Floats are stored as uint64 representation so the first byte tells length
 	# Next one is exponent and high-precision part of mantissa
 	def read_next_float(content)
-		binding.pry
+		byte_count, float_byte_string = read_next_uint_bytes(content)
+
+		# Here we can see how ruby and gob store floats in different way
+		# This is 17.0 in floating point math
+		# Gob presentation:
+		# 00110001 01000000
+		# Ruby presentation:
+		# 00000000 00000000 00000000 00000000 00000000 00000000 00110001 01000000
+		# Gob skips all zero bytes which ruby keeps
+
+		# TODO: This is also quite stupid like the way we handle integer
+		# So we fix this with by adding zero padded bytes to the left side
+		float = float_byte_string.rjust(8,"\x00").unpack("D*").first
+
+		[float, byte_count]
 	end
 
 	def content_byte_length
@@ -141,7 +155,7 @@ class Gob::Utils::Decoder
 
 		case type
 		when :bool
-			case content.unpack('C')[0]
+			case content.bytes.first
 			when 1
 				true
 			when 0
