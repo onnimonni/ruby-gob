@@ -40,7 +40,7 @@ class Gob::Utils::Decoder
 			end
 		end
 
-		# Tells how big the content is and how many bytes in beginning are just for the checksum
+		# Returns the integer and tells how many bytes were needed to read it
 		[int, int_byte_count]
 	end
 
