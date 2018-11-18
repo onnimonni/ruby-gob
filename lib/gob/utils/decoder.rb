@@ -72,6 +72,7 @@ class Gob::Utils::Decoder
 
 		# TODO: This is also quite stupid like the way we handle integer
 		# So we fix this with by adding zero padded bytes to the left side
+		# Ruby always uses double precision for floats so this is just fine
 		float = float_byte_string.rjust(8,"\x00").unpack("D*").first
 
 		[float, byte_count]
