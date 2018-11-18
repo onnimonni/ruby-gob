@@ -85,8 +85,15 @@ class Gob::Utils::Decoder
 	# Checks if the gob encoded content length is valid and
 	# no bytes were missing in the transit
 	def content_length_correct?(content=@content)
-		length, check_bytes = read_next_uint(content)
-		length == content.bytes.length - check_bytes
+		traveled_length = 0
+		total_length = content.bytes.length
+		until traveled_length >= total_length
+			part_length, check_bytes = read_next_uint(content[traveled_length..-1])
+			traveled_length += part_length + check_bytes
+		end
+
+		# Check if we went through all of the bytes items
+		total_length == traveled_length
 	end
 
 	# These are the supported types for gob encoding
@@ -126,16 +133,14 @@ class Gob::Utils::Decoder
 
 	# Converts gob decoded string into ruby objects
 	def decode(content=@content)
+		unless content_length_correct?(content)
+			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
+		end
 		# Start recursing rest of the body
 		decode_data_type( go_through_length_bytes(content) )
 	end
 
 	def go_through_length_bytes(content)
-		# Validate length
-		unless content_length_correct?(content)
-			raise Gob::Utils::Decoder::ContentMissing, "Content length is too short, retry with all bytes intact"
-		end
-
 		content_length, skip_bytes = read_next_uint(content)
 		content[skip_bytes..-1]
 	end
@@ -178,6 +183,8 @@ class Gob::Utils::Decoder
 			raise NotImplementedError, "Complex type is not yet implemented in ruby-gob"
 		when :interface
 			raise NotImplementedError, "Interface type is not yet implemented in ruby-gob"
+		when :StructType
+			binding.pry
 		else
 			raise NotImplementedError, "Type #{@type} is not yet implemented in ruby-gob"
 		end
