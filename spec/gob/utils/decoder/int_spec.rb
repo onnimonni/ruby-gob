@@ -10,7 +10,7 @@ RSpec.describe Gob::Utils::Decoder do
     context "-5" do
       let!(:decoder) { Gob::Utils::Decoder.new("\x03\x04\x00\t") }
 
-      it "returns correct positive number" do
+      it "returns correct negative number" do
         expect(decoder.decode).to be -5
       end
     end

@@ -16,6 +16,7 @@ class Gob::Utils::Decoder
 
 			# TODO: really stupid way to convert golang integer to ruby but I wanted to move forward
 			# Problem with unpack is that I would need to know which size it is, and for now I'm just too lazy to figure out
+			# This would propably make the encoder much faster if written properly
 			int = content[1..int_byte_count].bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
 
 			# Also skip the first_byte which told us how many bytes there are
@@ -23,8 +24,20 @@ class Gob::Utils::Decoder
 		end
 
 		# Check the sign from the last digit and shift
+		# This is needed because golang uses last bit for the sign, for example 1000
+		# Ruby int: 			00000011 11101000
+		# Golang Gob int: 00000111 11010000 
+		# As you can see we need to shift the number one bit in order to get real number
+		# For negative numbers we need to check the last bit and correct the bits by adding one
+		# For example -10
+		# Gob int:  00001001
+		# Ruby int: 00001010 (this is just 10, we need to also add the sign)
 		if opts[:signed]
-			int = -(int % 2) + (int % 2 == 1 ? -1 : 1) * (int >> 1)
+			if (int % 2) == 0 # Positive
+				int = int >> 1
+			else # Negative
+				int = -(int >> 1) - 1
+			end
 		end
 
 		# Tells how big the content is and how many bytes in beginning are just for the checksum
