@@ -1,9 +1,138 @@
 class Gob::Utils::Decoder
+
+	# These are the supported types for gob encoding
+	TYPES = {
+		1 => :bool,
+		2 => :int,
+		3 => :uint,
+		4 => :float,
+		5 => :byte_array,
+		6 => :string,
+		7 => :complex,
+		8 => :interface,
+		# gap for reserved ids.
+		16 => :WireType,
+		17 => :ArrayType,
+		18 => :CommonType,
+		19 => :SliceType,
+		20 => :StructType,
+		21 => :FieldType,
+		22 => :FieldType_slice,
+		23 => :MapType
+	}.freeze
+
 	def initialize(content)
 		@content = content
 	end
 
-	# Returns the how many bytes are in the next uint and the bytes as well
+	def content_byte_length
+		read_next_uint(@content)
+	end
+
+	# Checks if the gob encoded content length is valid and
+	# no bytes were missing in the transit
+	def content_length_correct?(content=@content)
+		traveled_length = 0
+		total_length = content.bytes.length
+		until traveled_length >= total_length
+			part_length, check_bytes = read_next_uint(content[traveled_length..-1])
+			traveled_length += part_length + check_bytes
+		end
+
+		# Check if we went through all of the bytes items
+		total_length == traveled_length
+	end
+
+	# Checks which kind of data is included
+	def type(content=@content)
+		content_length, skip_bytes = read_next_uint(content)
+		get_type(content[skip_bytes..-1])
+	end
+
+	# Converts gob decoded string into ruby objects
+	def decode(content=@content)
+		unless content_length_correct?(content)
+			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
+		end
+		# Start recursing rest of the body
+		result = split_content_into_parts(content).map do |part|
+			type_for_part = get_type(part)
+			decode_data_type(type,content_without_length(content))
+		end
+
+		result.first
+	end
+
+	private 
+
+	def get_type(content)
+		type_int = read_next_int(content).first
+		if type_int < 0 # Spec says that new types are defined with negative number
+			# New type definition needs to be done
+			raise "Custom types are not yet supported"
+		else
+			# Basic types are defined in the spec
+			type_for_basic_byte(type_int,content)
+		end
+	end
+
+	def type_for_basic_byte(type_int,content)
+		unless TYPES.include? type_int
+			#binding.pry
+			raise NotImplementedError, "This basic type is not yet implemented in ruby-gob"
+		end
+		TYPES[type_int]
+	end
+
+	def content_without_length(content)
+		content_length, skip_bytes = read_next_uint(content)
+		content[skip_bytes..-1]
+	end
+
+	def check_for_zero_digit?(byte)
+		byte.unpack('C')[0] == 0
+	end
+
+	def decode_data_type(type, content)
+		unless check_for_zero_digit?(content[1])
+			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
+		end
+
+		# Rest of the content is for the data itself
+		content = content[2..-1]
+
+		case type
+		when :bool
+			case content.bytes.first
+			when 1
+				true
+			when 0
+				false
+			else
+				raise Gob::Utils::Decoder::DecodingError::ZeroMismatch, "Incorrect byte for boolean type: #{content.unpack('C')[0]}"
+			end
+		when :int
+			read_next_int(content).first
+		when :uint
+			read_next_uint(content).first
+		when :float
+			read_next_float(content).first
+		when :byte_array
+			content_without_length(content).bytes # byte array works exactly like string but it's used similiarly here as in golang
+		when :string
+			content_without_length(content)
+		when :complex
+			raise NotImplementedError, "Complex type is not yet implemented in ruby-gob"
+		when :interface
+			raise NotImplementedError, "Interface type is not yet implemented in ruby-gob"
+		when :StructType
+			binding.pry
+		else
+			raise NotImplementedError, "Type #{@type} is not yet implemented in ruby-gob"
+		end
+	end
+
+		# Returns the how many bytes are in the next uint and the bytes as well
 	def read_next_uint_bytes(content)
 		first_byte = content[0].unpack('C')[0]
 		if first_byte <= 128 # Source: https://golang.org/pkg/encoding/gob/
@@ -78,115 +207,16 @@ class Gob::Utils::Decoder
 		[float, byte_count]
 	end
 
-	def content_byte_length
-		read_next_uint(@content)
-	end
-
-	# Checks if the gob encoded content length is valid and
-	# no bytes were missing in the transit
-	def content_length_correct?(content=@content)
+	# Split content into parts which can then be encoded
+	def split_content_into_parts(content)
+		parts = []
 		traveled_length = 0
 		total_length = content.bytes.length
 		until traveled_length >= total_length
 			part_length, check_bytes = read_next_uint(content[traveled_length..-1])
+			parts << content[(traveled_length+check_bytes)..(traveled_length+part_length)]
 			traveled_length += part_length + check_bytes
 		end
-
-		# Check if we went through all of the bytes items
-		total_length == traveled_length
-	end
-
-	# These are the supported types for gob encoding
-	TYPES = {
-		1 => :bool,
-		2 => :int,
-		3 => :uint,
-		4 => :float,
-		5 => :byte_array,
-		6 => :string,
-		7 => :complex,
-		8 => :interface,
-		# gap for reserved ids.
-		16 => :WireType,
-		17 => :ArrayType,
-		18 => :CommonType,
-		19 => :SliceType,
-		20 => :StructType,
-		21 => :FieldType,
-		22 => :FieldType_slice,
-		23 => :MapType
-	}.freeze
-
-	# Checks which kind of data is included
-	def type(content=@content)
-		content_length, skip_bytes = read_next_uint(content)
-		type_for_byte(content[skip_bytes])
-	end
-
-	def type_for_byte(byte)
-		type = TYPES[(byte.unpack('C')[0]/2)]
-		unless type
-			raise NotImplementedError, "Type #{type_byte} is not yet implemented in ruby-gob"
-		end
-		type
-	end
-
-	# Converts gob decoded string into ruby objects
-	def decode(content=@content)
-		unless content_length_correct?(content)
-			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
-		end
-		# Start recursing rest of the body
-		decode_data_type( go_through_length_bytes(content) )
-	end
-
-	def go_through_length_bytes(content)
-		content_length, skip_bytes = read_next_uint(content)
-		content[skip_bytes..-1]
-	end
-
-	def check_for_zero_digit?(byte)
-		byte.unpack('C')[0] == 0
-	end
-
-	def decode_data_type(content)
-		type = type_for_byte(content[0])
-
-		unless check_for_zero_digit?(content[1])
-			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
-		end
-
-		# Rest of the content is for the data itself
-		content = content[2..-1]
-
-		case type
-		when :bool
-			case content.bytes.first
-			when 1
-				true
-			when 0
-				false
-			else
-				raise Gob::Utils::Decoder::DecodingError::ZeroMismatch, "Incorrect byte for boolean type: #{content.unpack('C')[0]}"
-			end
-		when :int
-			read_next_int(content).first
-		when :uint
-			read_next_uint(content).first
-		when :float
-			read_next_float(content).first
-		when :byte_array
-			go_through_length_bytes(content).bytes # byte array works exactly like string but it's used similiarly here as in golang
-		when :string
-			go_through_length_bytes(content)
-		when :complex
-			raise NotImplementedError, "Complex type is not yet implemented in ruby-gob"
-		when :interface
-			raise NotImplementedError, "Interface type is not yet implemented in ruby-gob"
-		when :StructType
-			binding.pry
-		else
-			raise NotImplementedError, "Type #{@type} is not yet implemented in ruby-gob"
-		end
+		parts
 	end
 end
