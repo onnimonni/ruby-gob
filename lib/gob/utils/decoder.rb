@@ -3,25 +3,37 @@ class Gob::Utils::Decoder
 		@content = content
 	end
 
+
 	# Reads next integer from content
-	def read_next_int(content,opts={signed: true})
+	# Returns the integer and tells how many bytes were needed to read it
+	def read_next_uint(content)
 		first_byte = content[0].unpack('C')[0]
 		if first_byte <= 128 # Source: https://golang.org/pkg/encoding/gob/
 			# First byte tells the length if byte count is smaller than 128
-			int = first_byte
-			int_byte_count = 1
+			uint = first_byte
+			uint_byte_count = 1
 		else
 			# First byte holds the byte count, negated
-			int_byte_count = (first_byte ^ 0xFF) + 1
+			uint_byte_count = (first_byte ^ 0xFF) + 1
 
 			# TODO: really stupid way to convert golang integer to ruby but I wanted to move forward
 			# Problem with unpack is that I would need to know which size it is, and for now I'm just too lazy to figure out
 			# This would propably make the encoder much faster if written properly
-			int = content[1..int_byte_count].bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
+			uint = content[1..uint_byte_count].bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
 
 			# Also skip the first_byte which told us how many bytes there are
-			int_byte_count += 1
+			uint_byte_count += 1
 		end
+		
+		# Returns the integer and tells how many bytes were needed to read it
+		[uint, uint_byte_count]
+	end
+
+	# Reads next integer from content
+	# Returns the integer and tells how many bytes were needed to read it
+	def read_next_int(content)
+		# Int works just like uint but we need to check the last bit of the number
+		uint, byte_count = read_next_uint(content)
 
 		# Check the sign from the last digit and shift
 		# This is needed because golang uses last bit for the sign, for example 1000
@@ -32,20 +44,19 @@ class Gob::Utils::Decoder
 		# For example -10
 		# Gob int:  00001001
 		# Ruby int: 00001010 (this is just 10, we need to also add the sign)
-		if opts[:signed]
-			if (int % 2) == 0 # Positive
-				int = int >> 1
-			else # Negative
-				int = -(int >> 1) - 1
-			end
+		if (uint % 2) == 0 # Positive
+			int = uint >> 1
+		else # Negative
+			int = -(uint >> 1) - 1
 		end
 
-		# Returns the integer and tells how many bytes were needed to read it
-		[int, int_byte_count]
+		[int, byte_count]
 	end
 
-	def read_next_uint(content)
-		read_next_int(content, signed: false)
+	# Floats are stored as uint64 representation so the first byte tells length
+	# Next one is exponent and high-precision part of mantissa
+	def read_next_float(content)
+		#binding.pry
 	end
 
 	def content_byte_length
@@ -138,6 +149,8 @@ class Gob::Utils::Decoder
 			read_next_int(content).first
 		when :uint
 			read_next_uint(content).first
+		when :float
+			read_next_float(content).first
 		when :string
 			go_through_length_bytes(content)
 		else
