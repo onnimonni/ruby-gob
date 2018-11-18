@@ -170,6 +170,8 @@ class Gob::Utils::Decoder
 			read_next_uint(content).first
 		when :float
 			read_next_float(content).first
+		when :byte_array
+			go_through_length_bytes(content).bytes # byte array works exactly like string but it's used similiarly here as in golang
 		when :string
 			go_through_length_bytes(content)
 		else

@@ -23,7 +23,7 @@ RSpec.describe Gob::Utils::Decoder do
       end
     end
 
-    context "Hello" do
+    context "Hello World!" do
       let!(:content) { "\x0F\f\x00\fHello World!" }
       let!(:decoder) { Gob::Utils::Decoder.new(content) }
 
@@ -41,6 +41,27 @@ RSpec.describe Gob::Utils::Decoder do
 
       it "returns correct string" do
         expect(decoder.decode).to eq "Hello World!"
+      end
+    end
+
+    context 'empty string ""' do
+      let!(:content) { "\u0003\f\u0000\u0000" }
+      let!(:decoder) { Gob::Utils::Decoder.new(content) }
+
+      it "has correct length according to bytes" do
+        expect(decoder.content_byte_length).to eq [3,1]
+      end
+
+      it "has correct length according to bytes" do
+        expect(decoder.content_length_correct?).to be true
+      end
+
+      it "has correct type" do
+        expect(decoder.type).to be :string
+      end
+
+      it "returns correct string" do
+        expect(decoder.decode).to eq ""
       end
     end
 
