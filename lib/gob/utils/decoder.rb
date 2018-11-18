@@ -23,6 +23,7 @@ class Gob::Utils::Decoder
 
 	def initialize(content)
 		@content = content
+		@custom_types = {}
 	end
 
 	def content_byte_length
@@ -52,12 +53,13 @@ class Gob::Utils::Decoder
 	# Converts gob decoded string into ruby objects
 	def decode(content=@content)
 		unless content_length_correct?(content)
-			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
+			raise Gob::Utils::Decoder::DecoderError::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
 		end
+
 		# Start recursing rest of the body
 		result = split_content_into_parts(content).map do |part|
 			type_for_part = get_type(part)
-			decode_data_type(type,content_without_length(content))
+			decode_data_type(type, part)
 		end
 
 		result.first
@@ -68,17 +70,21 @@ class Gob::Utils::Decoder
 	def get_type(content)
 		type_int = read_next_int(content).first
 		if type_int < 0 # Spec says that new types are defined with negative number
-			# New type definition needs to be done
-			raise "Custom types are not yet supported"
+			define_type(-type_int, content)
 		else
 			# Basic types are defined in the spec
 			type_for_basic_byte(type_int,content)
 		end
 	end
 
+	def define_type(type_int, content)
+		if @custom_types[type_int]
+			raise Gob::Utils::Decoder::DecodingError::DuplicateType, "This custom gob type is already defined"
+		end
+	end
+
 	def type_for_basic_byte(type_int,content)
 		unless TYPES.include? type_int
-			#binding.pry
 			raise NotImplementedError, "This basic type is not yet implemented in ruby-gob"
 		end
 		TYPES[type_int]
@@ -95,9 +101,10 @@ class Gob::Utils::Decoder
 
 	def decode_data_type(type, content)
 		unless check_for_zero_digit?(content[1])
-			raise Gob::Utils::Decoder::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
+			raise Gob::Utils::Decoder::DecodingError::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
 		end
 
+		#binding.pry
 		# Rest of the content is for the data itself
 		content = content[2..-1]
 
@@ -126,7 +133,7 @@ class Gob::Utils::Decoder
 		when :interface
 			raise NotImplementedError, "Interface type is not yet implemented in ruby-gob"
 		when :StructType
-			binding.pry
+			raise NotImplementedError, "StructType is not yet implemented in ruby-gob"
 		else
 			raise NotImplementedError, "Type #{@type} is not yet implemented in ruby-gob"
 		end
@@ -214,7 +221,7 @@ class Gob::Utils::Decoder
 		total_length = content.bytes.length
 		until traveled_length >= total_length
 			part_length, check_bytes = read_next_uint(content[traveled_length..-1])
-			parts << content[(traveled_length+check_bytes)..(traveled_length+part_length)]
+			parts << content[(traveled_length+check_bytes)..(traveled_length+check_bytes+part_length)]
 			traveled_length += part_length + check_bytes
 		end
 		parts
