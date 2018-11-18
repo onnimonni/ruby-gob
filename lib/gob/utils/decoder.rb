@@ -12,11 +12,14 @@ class Gob::Utils::Decoder
 			int_byte_count = 1
 		else
 			# First byte holds the byte count, negated
-			int_byte_count = (first_byte ^ 0xFF) + 1 + 1
+			int_byte_count = (first_byte ^ 0xFF) + 1
 
 			# TODO: really stupid way to convert golang integer to ruby but I wanted to move forward
 			# Problem with unpack is that I would need to know which size it is, and for now I'm just too lazy to figure out
 			int = content[1..int_byte_count].bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
+
+			# Also skip the first_byte which told us how many bytes there are
+			int_byte_count += 1
 		end
 
 		# Check the sign from the last digit and shift
