@@ -46,8 +46,7 @@ class Gob::Utils::Decoder
 
 	# Checks which kind of data is included
 	def type(content=@content)
-		content_length, skip_bytes = read_next_uint(content)
-		get_type(content[skip_bytes..-1])
+		get_type(split_content_into_parts(content).first)
 	end
 
 	# Converts gob decoded string into ruby objects
@@ -71,9 +70,11 @@ class Gob::Utils::Decoder
 		type_int = read_next_int(content).first
 		if type_int < 0 # Spec says that new types are defined with negative number
 			define_type(-type_int, content)
-		else
+		elsif type_int < 65
 			# Basic types are defined in the spec
 			type_for_basic_byte(type_int,content)
+		else
+			@custom_types[type_int]
 		end
 	end
 
@@ -81,6 +82,28 @@ class Gob::Utils::Decoder
 		if @custom_types[type_int]
 			raise Gob::Utils::Decoder::DecodingError::DuplicateType, "This custom gob type is already defined"
 		end
+
+		idx = index_of_wiretype_value_encoding(type_int,content)
+
+		unless read_next_int(content[idx..-1]).first == type_int
+			raise Gob::Utils::Decoder::DecodingError::SkipByteMissing, "Support for this many types is not implemented yet" 
+		end
+
+		wiretype_encoding_bytes = content_without_length(content[0..idx-1])
+		value_encoding_bytes = content_without_length(content[idx..-1])
+
+		case wiretype_encoding_bytes.bytes
+		when [1,1,2] # Array definition
+			known_type = get_type( value_encoding_bytes[2] )
+			@custom_types[type_int] = Gob::Utils::Types::Array.new(type: known_type)
+		else
+			raise NotImplementedError, "Unknown wiretype definition"
+		end
+	end
+
+	# Searches where the pattern of is true
+	def index_of_wiretype_value_encoding(type_int,content)
+		content.force_encoding('ASCII-8BIT').index([255,type_int*2].pack("C*"))
 	end
 
 	def type_for_basic_byte(type_int,content)
@@ -104,7 +127,6 @@ class Gob::Utils::Decoder
 			raise Gob::Utils::Decoder::DecodingError::SkipByteMissing, "Content should have a zero byte after #{type} declaration" 
 		end
 
-		#binding.pry
 		# Rest of the content is for the data itself
 		content = content[2..-1]
 
