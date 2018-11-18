@@ -176,6 +176,8 @@ class Gob::Utils::Decoder
 			go_through_length_bytes(content)
 		when :complex
 			raise NotImplementedError, "Complex type is not yet implemented in ruby-gob"
+		when :interface
+			raise NotImplementedError, "Interface type is not yet implemented in ruby-gob"
 		else
 			raise NotImplementedError, "Type #{@type} is not yet implemented in ruby-gob"
 		end
