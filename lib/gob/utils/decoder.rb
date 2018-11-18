@@ -3,30 +3,34 @@ class Gob::Utils::Decoder
 		@content = content
 	end
 
-
-	# Reads next integer from content
-	# Returns the integer and tells how many bytes were needed to read it
-	def read_next_uint(content)
+	# Returns the how many bytes are in the next uint and the bytes as well
+	def read_next_uint_bytes(content)
 		first_byte = content[0].unpack('C')[0]
 		if first_byte <= 128 # Source: https://golang.org/pkg/encoding/gob/
 			# First byte tells the length if byte count is smaller than 128
-			uint = first_byte
-			uint_byte_count = 1
+			[1, content[0..0]]
 		else
 			# First byte holds the byte count, negated
 			uint_byte_count = (first_byte ^ 0xFF) + 1
 
-			# TODO: really stupid way to convert golang integer to ruby but I wanted to move forward
-			# Problem with unpack is that I would need to know which size it is, and for now I'm just too lazy to figure out
-			# This would propably make the encoder much faster if written properly
-			uint = content[1..uint_byte_count].bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
-
 			# Also skip the first_byte which told us how many bytes there are
-			uint_byte_count += 1
+			# And return the bytes
+			[uint_byte_count+1, content[1..uint_byte_count]]
 		end
+	end
+
+	# Reads next integer from content
+	# Returns the integer and tells how many bytes were needed to read it
+	def read_next_uint(content)
+		byte_count, uint_bytes = read_next_uint_bytes(content)
+
+		# TODO: really stupid way to convert golang integer to ruby but I wanted to move forward
+		# Problem with unpack is that I would need to know which size it is, and for now I'm just too lazy to figure out
+		# This would propably make the encoder much faster if written properly
+		uint = uint_bytes.bytes.map{ |b| b.to_s(2).rjust(8,"0") }.join.to_i(2)
 		
 		# Returns the integer and tells how many bytes were needed to read it
-		[uint, uint_byte_count]
+		[uint, byte_count]
 	end
 
 	# Reads next integer from content
@@ -56,7 +60,7 @@ class Gob::Utils::Decoder
 	# Floats are stored as uint64 representation so the first byte tells length
 	# Next one is exponent and high-precision part of mantissa
 	def read_next_float(content)
-		#binding.pry
+		binding.pry
 	end
 
 	def content_byte_length
